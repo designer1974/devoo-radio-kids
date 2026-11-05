@@ -8,6 +8,8 @@ import 'favorites_page.dart';
 import 'home_page.dart';
 import 'map_page.dart';
 import 'player.dart';
+import 'recording.dart';
+import 'recordings_page.dart';
 import 'store.dart';
 import 'update.dart';
 import 'widgets.dart';
@@ -29,6 +31,8 @@ Future<void> main() async {
   } catch (_) {}
   runApp(const KidsApp());
   unawaited(KidsStore.i.init());
+  unawaited(RecController.i.recoverInterrupted()); // anche: segue le registrazioni programmate
+  unawaited(Schedules.i.reload());
 }
 
 class KidsApp extends StatelessWidget {
@@ -77,23 +81,35 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   StreamSubscription<String>? _errors;
+  StreamSubscription<String>? _recMsgs;
+  // tornando nell'app: aggiorna registrazioni e programmi (possono essere finiti ad app chiusa)
+  late final AppLifecycleListener _life = AppLifecycleListener(onResume: () {
+    Recordings.i.reload();
+    Schedules.i.reload();
+  });
 
   @override
   void initState() {
     super.initState();
-    _errors = RadioPlayer.i.errors.listen((msg) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
-    });
+    _errors = RadioPlayer.i.errors.listen(_snack);
+    _recMsgs = RecController.i.messages.listen(_snack);
+    _life.hashCode; // avvia l'ascolto
     Future<void>.delayed(const Duration(seconds: 5), () {
       if (mounted) checkForUpdate(context);
     });
   }
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
+  }
+
   @override
   void dispose() {
+    _life.dispose();
+    _recMsgs?.cancel();
     _errors?.cancel();
     super.dispose();
   }
@@ -105,11 +121,12 @@ class _HomeShellState extends State<HomeShell> {
       builder: (context, tab, _) => Scaffold(
         body: IndexedStack(
           index: tab,
-          children: const [HomePage(), MapPage(), FavoritesPage()],
+          children: const [HomePage(), MapPage(), FavoritesPage(), RecordingsPage()],
         ),
         bottomNavigationBar: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const RecBanner(),
             const MiniPlayer(),
             NavigationBarTheme(
               data: NavigationBarThemeData(
@@ -131,6 +148,7 @@ class _HomeShellState extends State<HomeShell> {
                   NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public), label: 'Mappa'),
                   NavigationDestination(
                       icon: Icon(Icons.favorite_border), selectedIcon: Icon(Icons.favorite), label: 'Preferiti'),
+                  NavigationDestination(icon: Icon(Icons.mic_none), selectedIcon: Icon(Icons.mic), label: 'Registrate'),
                 ],
               ),
             ),

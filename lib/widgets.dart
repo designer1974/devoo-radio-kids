@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'player.dart';
+import 'recording.dart';
+import 'schedule_page.dart';
 import 'store.dart';
 
 /// Colori di devoo.it: blu notte molto scuro, con il giallo dei bambini.
@@ -72,6 +74,7 @@ class StationCard extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => current ? RadioPlayer.i.toggle() : RadioPlayer.i.play(station),
+            onLongPress: () => showStationMenu(context, station),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -235,6 +238,7 @@ class MiniPlayer extends StatelessWidget {
                   ],
                 ),
               ),
+              const RecButton(),
               IconButton(
                 tooltip: 'Spegni dopo…',
                 onPressed: () => showSleepSheet(context),
@@ -391,4 +395,131 @@ class BigMessage extends StatelessWidget {
       ),
     );
   }
+}
+
+
+const recRed = Color(0xFFFF3B5C);
+
+/// Pulsante rosso ● del lettore: registra la radio in ascolto, o ferma e salva.
+class RecButton extends StatelessWidget {
+  const RecButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([RecController.i, RadioPlayer.i]),
+      builder: (context, _) {
+        final r = RecController.i;
+        final s = RadioPlayer.i.current;
+        if (s == null) return const SizedBox.shrink();
+        final mine = r.isRecording(s);
+        final pending = r.isPending(s);
+        return IconButton(
+          tooltip: mine ? 'Ferma e salva' : 'Registra',
+          onPressed: () {
+            if (mine) {
+              r.stopAny();
+            } else {
+              r.recordStation(s);
+            }
+          },
+          icon: pending || (mine && r.anySaving)
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 3, color: recRed))
+              : Icon(mine ? Icons.stop_circle_rounded : Icons.fiber_manual_record_rounded, color: recRed, size: 30),
+        );
+      },
+    );
+  }
+}
+
+/// Barra rossa in basso mentre si registra (anche le programmate).
+class RecBanner extends StatefulWidget {
+  const RecBanner({super.key});
+  @override
+  State<RecBanner> createState() => _RecBannerState();
+}
+
+class _RecBannerState extends State<RecBanner> {
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: RecController.i,
+      builder: (context, _) {
+        final r = RecController.i;
+        if (!r.busy) return const SizedBox.shrink();
+        final saving = r.anySaving;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+          padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+          decoration: BoxDecoration(color: recRed, borderRadius: BorderRadius.circular(22)),
+          child: Row(
+            children: [
+              const Icon(Icons.fiber_manual_record_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  saving
+                      ? 'Salvo la registrazione…'
+                      : '${r.external ? '⏰ ' : ''}${r.recName} · ${fmtDur(r.elapsed)} · ${fmtSize(r.recBytes)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                ),
+              ),
+              TextButton(
+                onPressed: saving ? null : r.stopAny,
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: recRed,
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('Ferma', style: TextStyle(fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Tenendo premuto su una radio: ascolta, registra, programma, preferito.
+Future<void> showStationMenu(BuildContext context, Station s) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: navy2,
+    showDragHandle: true,
+    builder: (c) {
+      Widget item(String emoji, String label, VoidCallback onTap) => ListTile(
+            leading: Text(emoji, style: const TextStyle(fontSize: 26)),
+            title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
+            onTap: () {
+              Navigator.pop(c);
+              onTap();
+            },
+          );
+      final fav = Library.i.isFavorite(s);
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: StationLogo(s, size: 48, radius: 14),
+              title: Text(s.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+              subtitle: Text('${s.flag} ${s.place}', style: const TextStyle(color: Colors.white60)),
+            ),
+            const Divider(color: Colors.white12),
+            item('▶️', 'Ascolta', () => RadioPlayer.i.play(s)),
+            item('🔴', 'Registra adesso', () => RecController.i.recordStation(s)),
+            item('⏰', 'Programma registrazione', () => openScheduleEditor(context, station: s)),
+            item(fav ? '💔' : '❤️', fav ? 'Togli dai preferiti' : 'Aggiungi ai preferiti', () => Library.i.toggleFavorite(s)),
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    },
+  );
 }

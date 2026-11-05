@@ -8,6 +8,8 @@ Le radio per bambini e ragazzi di tutto il mondo, in un'app semplice e colorata.
 - Preferiti col cuore ❤️ e radio a sorpresa 🎲
 - Spegnimento automatico per la nanna
 - Suona anche a schermo spento
+- 🔴 Registra la radio in ascolto (qualità originale, file .m4a)
+- ⏰ Registrazioni programmate: oggi, domani o ogni giorno, anche ad app chiusa
 
 ## Scaricare l'app
 
