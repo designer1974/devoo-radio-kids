@@ -59,6 +59,19 @@ class MainActivity : AudioServiceActivity() {
                         result.success(ok)
                     }
 
+                    // ---- aggiornamento dentro l'app ----
+                    "installStatus" -> {
+                        val p = getSharedPreferences("kids_update", MODE_PRIVATE)
+                        result.success(mapOf("status" to p.getInt("status", -100), "msg" to (p.getString("msg", "") ?: "")))
+                    }
+                    "installApk" -> {
+                        val path = call.argument<String>("path")!!
+                        Thread {
+                            val r = try { installApk(path); "ok" } catch (e: Exception) { e.message ?: "errore" }
+                            runOnUiThread { result.success(r) }
+                        }.start()
+                    }
+
                     // ---- registrazione diretta dello stream ----
                     "streamStart" -> {
                         StreamRecorder.start(
@@ -185,6 +198,34 @@ class MainActivity : AudioServiceActivity() {
             } catch (e: Exception) {
                 result.error("REC", e.message ?: "Errore", null)
             }
+        }
+    }
+
+    /**
+     * Aggiornamento: passa l'APK scaricato all'installatore di Android (PackageInstaller).
+     * Android poi mostra la conferma "Installa" e l'app nuova prende il posto della vecchia.
+     */
+    private fun installApk(path: String) {
+        val f = java.io.File(path)
+        getSharedPreferences("kids_update", MODE_PRIVATE).edit().putInt("status", -100).putString("msg", "").commit()
+        val pi = packageManager.packageInstaller
+        val params = android.content.pm.PackageInstaller.SessionParams(
+            android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
+        )
+        val id = pi.createSession(params)
+        pi.openSession(id).use { s ->
+            f.inputStream().use { input ->
+                s.openWrite("update.apk", 0, f.length()).use { out ->
+                    input.copyTo(out, 256 * 1024)
+                    s.fsync(out)
+                }
+            }
+            val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+            val sender = android.app.PendingIntent.getBroadcast(
+                this, id, Intent(this, InstallReceiver::class.java), flags
+            ).intentSender
+            s.commit(sender)
         }
     }
 }

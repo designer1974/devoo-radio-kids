@@ -456,16 +456,33 @@ class _RecBannerState extends State<RecBanner> {
             children: [
               const Icon(Icons.fiber_manual_record_rounded, color: Colors.white, size: 18),
               const SizedBox(width: 8),
+              // il tempo resta sempre visibile: si accorcia solo il nome della radio
               Expanded(
                 child: Text(
-                  saving
-                      ? 'Salvo la registrazione…'
-                      : '${r.external ? '⏰ ' : ''}${r.recName} · ${fmtDur(r.elapsed)} · ${fmtSize(r.recBytes)}',
+                  saving ? 'Salvo la registrazione…' : '${r.external ? '⏰ ' : ''}${r.recName}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                 ),
               ),
+              if (!saving) ...[
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(fmtDur(r.elapsed),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 17,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        )),
+                    Text(fmtSize(r.recBytes), style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                  ],
+                ),
+              ],
+              const SizedBox(width: 8),
               TextButton(
                 onPressed: saving ? null : r.stopAny,
                 style: TextButton.styleFrom(
